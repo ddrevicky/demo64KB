@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\Graphics.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Maths.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\PlatformFunctions.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Util.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\UtilMesh.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
+    <ClCompile Include="src\App.cpp">
+      <Filter>Application</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\Graphics.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="src\glFunctions.h">
+      <Filter>OpenGL Function Declarations</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shaders.h">
+      <Filter>shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Def.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Maths.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\PlatformFunctions.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Util.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\UtilMesh.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="src\main.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+    <ClInclude Include="src\App.h">
+      <Filter>Application</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{df96a353-b554-48fe-9c9f-754e43029389}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Util">
+      <UniqueIdentifier>{23e43833-3eb2-477e-9743-4d8ae01a4d08}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="OpenGL Function Declarations">
+      <UniqueIdentifier>{8fb6a171-0df8-45b1-be3a-a87e2e199837}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Graphics">
+      <UniqueIdentifier>{d2639cdc-6824-4747-a185-bbba5578f412}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Application">
+      <UniqueIdentifier>{50c09493-0d1a-4472-a437-9085d927403c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

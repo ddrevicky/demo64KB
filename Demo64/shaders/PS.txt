@@ -1,0 +1,309 @@
+#version 400 core
+
+uniform vec2 iResolution;
+uniform float iGlobalTime;
+uniform vec3 iCamPos;
+uniform vec3 iCamTarget;
+
+in vec4 gl_FragCoord;
+
+out vec4 fColor;
+
+vec2 map (vec3 p, int octaves);
+#define FLT_EQ(a, b) (abs(a - b) < 0.1)
+
+float noise(vec2 p) 
+{
+	vec2 f = fract(p);
+	p = floor(p);
+	float v = p.x+p.y*1000.0;
+	vec4 r = vec4(v, v+1.0, v+1000.0, v+1001.0);
+	r = fract(100000.0*sin(r*.001));
+	f = f*f*(3.0-2.0*f);
+	return 2.0*(mix(mix(r.x, r.y, f.x), mix(r.z, r.w, f.x), f.y))-1.0;
+}
+
+vec3 getNormal(vec3 p, int octaves)
+{
+	float h = 0.002;
+	vec3 n;
+	n.x = map(p + vec3(h, 0, 0), octaves).x - map(p - vec3(h, 0, 0), octaves).x;
+	n.y = 2*h;
+	n.z = map(p + vec3(0, 0, h), octaves).x - map(p - vec3(0, 0, h), octaves).x;
+        return normalize(n);
+}
+
+float fbm(vec2 p, int octaves) 
+{	
+	float value = 0.0; 
+	float amplitude = 0.5; 
+	float frequency = 0.4; 
+
+	// Terrain distortion
+	float tmpW = (noise(p*0.05)*0.3 + 0.5);
+	tmpW = 10*tmpW *tmpW*tmpW*tmpW*tmpW;
+	value += tmpW * noise(0.1*p);
+
+	for (int i = 0; i < 12; i++) 
+	{
+		if (i < octaves) 
+		{
+			value += -amplitude * noise(0.8*p*frequency);
+		}
+		else break;
+
+		amplitude *= 0.5;
+		frequency *= 2.0;
+	}
+	return value;
+}
+
+#define SKY_MAT -1.0
+#define TERRAIN_MAT 0.0
+#define WATER_MAT 1.0
+#define MAX_T 158.0
+#define MAX_STEPS 200
+
+#define WATER_LINE -0.3
+#define GROUND_LINE 0.0
+#define CLOUD_LINE 10.0
+
+vec2 map(vec3 p, int octaves)
+{
+	float tMin = MAX_T; // nearest terrain intersection
+	float material = SKY_MAT;
+
+	float h = fbm(p.xz, octaves);
+	h += 1.5*smoothstep(-0.0, 1.2, h);
+	float depth = p.y - h;
+	if (depth < tMin)
+        { 
+		tMin = depth;
+		material = TERRAIN_MAT;
+	}
+
+	return vec2(tMin, material);
+}
+
+vec2 castRay(vec3 ro, vec3 rd, int octaves)
+{
+	float t = 0.0; 
+	float material = SKY_MAT;
+	float prec = 0.002;
+
+	for (int i = 0; i < MAX_STEPS; ++i) 
+    {
+		vec2 res = map(ro + rd*t, octaves);
+		float stepSize = 0.4*res.x;
+		t += stepSize;
+
+		if (stepSize < prec || t > MAX_T)
+		{
+			break;
+		}
+		else
+		{
+			material = res.y;
+		}
+	}
+
+	if (t > MAX_T) 
+		material = SKY_MAT;
+
+	return vec2(t, material);
+}
+
+float calcShadow(vec3 ro, vec3 rd, int octaves)
+{
+	float k = 2.0;
+	float precis = 0.02;
+	float minT = 0.2;
+	float tMax = 1.0;
+	float t = minT;
+	float shadow = 1.0;
+
+	for (int i = 0; i < 6; ++i)
+	{
+		float stepSize = 1.0*map(ro + rd*t, octaves).x;
+
+		if (stepSize < precis)
+		{
+			shadow = 0.0;
+			break;
+		}
+		if (t > tMax)
+		{
+			break;
+		}
+		shadow = min(shadow, k * stepSize / t);
+		t += stepSize;
+	}
+	shadow = clamp(shadow, 0.3, 1.0);
+	return shadow;
+}
+
+vec3 sunPosition = normalize(vec3(0, 0.5, -1));
+vec3 skyColor = vec3(.5,.6,0.8)*0.5;
+vec3 sunColor = vec3(1.0, 0.9, 0.3);
+
+vec3 sky(vec3 rayDirection)
+{
+	// Sun orb
+	float sunDot = max(dot(rayDirection, sunPosition), 0.0);
+	return skyColor + pow(sunDot, 80.0) * sunColor;
+}
+
+vec3 clouds(vec3 color, vec3 rayOrigin, vec3 rayDirection)
+{
+	if (rayDirection.y < 0.01) 
+		return color;
+
+	vec3 skyPoint = rayOrigin + rayDirection * ((CLOUD_LINE - rayOrigin.y)/rayDirection.y);
+	skyPoint -= -iGlobalTime*0.75;
+	float fbmFactor = 0.3 + fbm(skyPoint.xz, 4);
+
+	// Lerp between sky current(sky) color and cloud color
+	vec3 cloudColor = vec3(0.9, 0.9, 0.9);								
+	color = mix(color, cloudColor, clamp(fbmFactor*rayDirection.y, 0.0, 1.0));	// Horizon fade
+	return color;
+}
+
+vec3 render (vec3 ro, vec3 rd)
+{
+	const int geoLOD = 4;		// fBm octaves for ray marching test
+	const int normalLOD = 11;	// fBm octaves for lighting
+	
+	vec2 result = castRay(ro, rd, geoLOD);
+	vec3 color;
+	
+	float travelledDistance = result.x;
+	float material = result.y;
+	vec3 point = ro + rd*travelledDistance;
+
+	// Sky color
+	if (FLT_EQ(material, SKY_MAT))
+	{
+		color = clouds(sky(rd), ro, rd); 
+		return color;
+	}
+
+	// Level of detail
+	int LOD = normalLOD;
+	int LODline = 0;
+	if (travelledDistance > LODline)
+	{
+		float t = (travelledDistance - LODline) / (MAX_T - LODline);
+		LOD = int(mix(normalLOD, geoLOD + 2, t));
+	}
+	vec3 normal = getNormal(point, LOD);
+
+	if (FLT_EQ(material, TERRAIN_MAT))
+	{
+		color = vec3(254/255.0, 244/255.0, 181.0/255.0);	// Sand color
+		float t;
+
+		vec3 groundColor = vec3(127/255.0, 113/255.0, 73.0/255.0);
+		t = (point.y - (WATER_LINE)) * 6; 
+		t = clamp(t, 0, 1);
+		color = mix(color, groundColor, t);
+
+		vec3 hillColor =  vec3(207/255.0, 198/255.0, 194.0/255.0);
+		t = (point.y - (GROUND_LINE)) * 0.9;
+		t = clamp(t, 0, 1);
+		color = mix(color, hillColor, t);
+
+		if (point.y < 0.5 && point.y > WATER_LINE)	// Low grass
+		{
+			if (normal.y > 0.8)
+			{
+				color = vec3(140/255.0,0.7, 36.0/255.0)*0.7;
+			}
+		}
+		else if (point.y > 0.5)	// High grass
+		{
+			if (normal.y > 0.9)
+			{
+				color = vec3(140/255.0,0.7, 36.0/255.0)*1.2;
+			}
+		}
+		else if (point.y < WATER_LINE)	// Water moss
+		{
+			if (normal.y > 0.95)
+			{
+				color = vec3(108/255.0, 80/255.0, 7.0/255.0);
+			}
+		}
+	}
+
+	// Lambert model
+	float ambient = 0.2;
+	float diffuse = max(dot(normal, sunPosition), 0.0);
+	float shadow = calcShadow(point, sunPosition, geoLOD);
+	color = color * (ambient + diffuse)*shadow;
+
+	// Water
+	if (point.y < WATER_LINE)
+	{
+		//Underwater darkening
+		float t = 1 - (WATER_LINE + 0.2 - point.y);
+		t = clamp(t, 0.5, 1.0);
+		color *= t;
+
+		// Normal distortion
+		vec3 waterPoint = ro + ((WATER_LINE - ro.y) / rd.y)*rd;
+		float time = iGlobalTime*2.9;
+		float nx = 0.2*cos(waterPoint.x*20);
+		float nz = 0.2*sin(waterPoint.z*20);
+		nx *= noise(waterPoint.xz*20 + time);
+		nz *= noise(waterPoint.xz*20 + time);
+		normal = normalize(vec3(nx, 7 , nz));
+
+		// Reflection vector
+		vec3 reflectVector = normalize(reflect(rd, normal));
+		vec3 reflectedColor = clouds(sky(reflectVector)*vec3(0.5,0.6,0.8)*0.5, ro, reflectVector);
+		
+		// Refractive factor
+		float refractiveFactor = abs(dot(rd, normal));
+		refractiveFactor = pow(refractiveFactor, 3);
+
+		// Lerp between reflective and refractive color
+		vec3 oldColor = color;
+		float mixFactor = clamp((waterPoint.y - point.y)*3.5, 0.0, 1.0);
+		color = mix(reflectedColor, color, refractiveFactor);		// Fresnel
+		color = mix(oldColor, color, mixFactor);
+	}
+	
+	// Exponential fog
+	float fog = exp(0.030 * (travelledDistance - 20)) - 1;
+	fog = clamp(fog, 0, 1);	
+	color = mix(color, skyColor, fog);
+	return color;
+}
+
+vec3 camPath( float time )
+{
+	return 850 * vec3(cos(0.2*time), 0.0, cos(0.31*time) );
+}
+
+void main()	
+{
+	vec2 uv = gl_FragCoord.xy / iResolution.xy;
+        uv = uv * 2.0 - 1.0;
+        uv.x *= iResolution.x / iResolution.y;
+
+	float t = 0.0152*iGlobalTime;
+
+	vec3 camPos = iCamPos;
+	vec3 camTarget = iCamTarget;
+
+	// camera matrix
+	vec3 ww = normalize(camTarget-camPos);
+	vec3 up = (vec3(0.0, 1.0, 0.0));						// world up
+	vec3 uu = normalize(cross(ww, up));						// camera right
+	vec3 vv = normalize(cross(uu, ww));						// camera up
+
+	vec3 ro = camPos;
+	vec3 rd = normalize(uv.x*uu + uv.y*vv + 2.0*ww);
+	vec3 color = render(ro, rd);
+	fColor = vec4(color, 1.0);
+}
